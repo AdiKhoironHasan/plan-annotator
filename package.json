@@ -1,0 +1,17 @@
+{
+  "name": "plan-annotator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "devDependencies": {
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.28.1",
+    "@types/node": "^20.14.10",
+    "obsidian": "^1.6.7",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.3"
+  }
+}
