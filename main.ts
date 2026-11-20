@@ -1,4 +1,4 @@
-import { ItemView, MarkdownView, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { EditorView } from "@codemirror/view";
 
 const ANNOTATOR_VIEW_TYPE = "plan-annotator-view";
@@ -12,8 +12,17 @@ interface Annotation {
   createdAt: string;
 }
 
+interface PlanAnnotatorSettings {
+  openSidebarOnStartup: boolean;
+}
+
+const DEFAULT_SETTINGS: PlanAnnotatorSettings = {
+  openSidebarOnStartup: true
+};
+
 interface PluginData {
   annotations: Annotation[];
+  settings?: Partial<PlanAnnotatorSettings>;
 }
 
 function isAnnotation(value: unknown): value is Annotation {
@@ -36,6 +45,7 @@ function isPluginData(value: unknown): value is PluginData {
 
 export default class PlanAnnotatorPlugin extends Plugin {
   private annotations: Annotation[] = [];
+  private preferences: PlanAnnotatorSettings = { ...DEFAULT_SETTINGS };
   private dataValid = true;
   private currentFilePath: string | null = null;
   private lastSelection: { file: TFile; view: EditorView; from: number; to: number; text: string } | null = null;
@@ -47,19 +57,43 @@ export default class PlanAnnotatorPlugin extends Plugin {
   get activeFilePath(): string | null {
     return this.currentFilePath;
   }
+  private savePluginData(annotations: Annotation[] = this.annotations): Promise<void> {
+    return this.saveData({ annotations, settings: this.preferences });
+  }
 
+  isSidebarStartupEnabled(): boolean {
+    return this.preferences.openSidebarOnStartup;
+  }
+
+  async setSidebarStartupEnabled(enabled: boolean): Promise<void> {
+    const previous = this.preferences.openSidebarOnStartup;
+    this.preferences = { ...this.preferences, openSidebarOnStartup: enabled };
+    try {
+      await this.savePluginData();
+    } catch (error) {
+      this.preferences = { ...this.preferences, openSidebarOnStartup: previous };
+      throw error;
+    }
+  }
   async onload(): Promise<void> {
     const stored = await this.loadData();
     if (stored == null) {
       this.annotations = [];
     } else if (isPluginData(stored)) {
       this.annotations = stored.annotations;
+      const storedSettings = stored.settings;
+      this.preferences = {
+        openSidebarOnStartup: typeof storedSettings?.openSidebarOnStartup === "boolean"
+          ? storedSettings.openSidebarOnStartup
+          : DEFAULT_SETTINGS.openSidebarOnStartup
+      };
     } else {
       this.dataValid = false;
       new Notice("Plan Annotator data is malformed. Annotation creation is disabled until the plugin data is fixed.", 0);
     }
     this.currentFilePath = this.app.workspace.getActiveFile()?.path ?? null;
     this.registerView(ANNOTATOR_VIEW_TYPE, (leaf) => new PlanAnnotatorView(leaf, this));
+    this.addSettingTab(new PlanAnnotatorSettingTab(this.app, this));
     const captureSelection = () => window.requestAnimationFrame(() => {
       const selection = this.getActiveSelection();
       for (const view of this.views) view.updateSelectionPreview(selection?.text ?? null);
@@ -100,7 +134,7 @@ export default class PlanAnnotatorPlugin extends Plugin {
       callback: () => void this.copyCurrentNoteAnnotations()
     });
     this.app.workspace.onLayoutReady(() => {
-      void this.openSidebarView();
+      if (this.preferences.openSidebarOnStartup) void this.openSidebarView();
     });
 
   }
@@ -163,7 +197,7 @@ export default class PlanAnnotatorPlugin extends Plugin {
     if (index < 0) return;
     const next = this.annotations.filter((_, annotationIndex) => annotationIndex !== index);
     try {
-      await this.saveData({ annotations: next });
+      await this.savePluginData(next);
       this.annotations = next;
       this.refreshViews();
     } catch {
@@ -174,7 +208,7 @@ export default class PlanAnnotatorPlugin extends Plugin {
     const next = this.annotations.filter((annotation) => annotation.filePath !== filePath);
     if (next.length === this.annotations.length) return;
     try {
-      await this.saveData({ annotations: next });
+      await this.savePluginData(next);
       this.annotations = next;
       this.refreshViews();
       new Notice("Deleted all comments for this note.");
@@ -226,7 +260,7 @@ export default class PlanAnnotatorPlugin extends Plugin {
     if (!this.dataValid) return;
     const next = [...this.annotations, annotation];
     try {
-      await this.saveData({ annotations: next });
+      await this.savePluginData(next);
       this.annotations = next;
       this.refreshViews();
     } catch {
@@ -242,6 +276,35 @@ export default class PlanAnnotatorPlugin extends Plugin {
       return;
     }
     await this.copyAnnotations(this.annotationsFor(file.path));
+  }
+}
+
+class PlanAnnotatorSettingTab extends PluginSettingTab {
+  constructor(app: PlanAnnotatorPlugin["app"], private readonly plugin: PlanAnnotatorPlugin) {
+    super(app, plugin);
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h2", { text: "Plan Annotator" });
+
+    new Setting(containerEl)
+      .setName("Open sidebar on startup")
+      .setDesc("Automatically open the Plan Annotator sidebar when Obsidian starts.")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.isSidebarStartupEnabled())
+        .onChange(async (enabled) => {
+          toggle.setDisabled(true);
+          try {
+            await this.plugin.setSidebarStartupEnabled(enabled);
+          } catch {
+            new Notice("Could not save Plan Annotator settings.");
+          } finally {
+            toggle.setValue(this.plugin.isSidebarStartupEnabled());
+            toggle.setDisabled(false);
+          }
+        }));
   }
 }
 

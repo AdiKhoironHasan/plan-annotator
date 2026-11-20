@@ -11,6 +11,10 @@ Plan Annotator lets you attach comments to selected text in Obsidian Markdown no
 
 The plugin does not modify note contents. Keep normal vault backups to preserve plugin data.
 
+## What's new in 1.0.2
+
+- Added a Plan Annotator settings tab with an **Open sidebar on startup** toggle (enabled by default).
+
 ## What's new in 1.0.1
 
 - Added **Delete All** for comments on the active note.

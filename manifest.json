@@ -1,7 +1,7 @@
 {
   "id": "plan-annotator",
   "name": "Plan Annotator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "0.15.0",
   "description": "Annotate selected text without modifying the note and export annotations as Markdown.",
   "author": "Adi Khoiron Hasan",
