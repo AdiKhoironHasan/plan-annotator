@@ -12,6 +12,21 @@
   gap: var(--size-4-2);
 }
 
+.plan-annotator-selection-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.plan-annotator-selection-preview {
+  max-height: 8rem;
+  overflow: auto;
+  padding: var(--size-4-2);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .plan-annotator-comment-input {
   width: 100%;
   min-height: 5rem;
@@ -66,4 +81,22 @@
 .plan-annotator-item p:last-child {
   margin-bottom: 0;
   white-space: pre-wrap;
+}
+
+.plan-annotator-sidebar button:not(:disabled) {
+  transition: transform 120ms ease;
+}
+
+.plan-annotator-sidebar button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.plan-annotator-sidebar button:not(:disabled):active {
+  transform: translateY(0) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-annotator-sidebar button:not(:disabled) {
+    transition: none;
+  }
 }

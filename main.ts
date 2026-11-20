@@ -60,7 +60,10 @@ export default class PlanAnnotatorPlugin extends Plugin {
     }
     this.currentFilePath = this.app.workspace.getActiveFile()?.path ?? null;
     this.registerView(ANNOTATOR_VIEW_TYPE, (leaf) => new PlanAnnotatorView(leaf, this));
-    const captureSelection = () => window.requestAnimationFrame(() => { void this.getActiveSelection(); });
+    const captureSelection = () => window.requestAnimationFrame(() => {
+      const selection = this.getActiveSelection();
+      for (const view of this.views) view.updateSelectionPreview(selection?.text ?? null);
+    });
     document.addEventListener("pointerup", captureSelection, true);
     document.addEventListener("keyup", captureSelection, true);
     document.addEventListener("selectionchange", captureSelection);
@@ -167,6 +170,18 @@ export default class PlanAnnotatorPlugin extends Plugin {
       new Notice("Could not delete annotation.");
     }
   }
+  async removeAnnotationsFor(filePath: string): Promise<void> {
+    const next = this.annotations.filter((annotation) => annotation.filePath !== filePath);
+    if (next.length === this.annotations.length) return;
+    try {
+      await this.saveData({ annotations: next });
+      this.annotations = next;
+      this.refreshViews();
+      new Notice("Deleted all comments for this note.");
+    } catch {
+      new Notice("Could not delete comments.");
+    }
+  }
 
   async copyAnnotations(annotations: Annotation[]): Promise<void> {
     if (annotations.length === 0) {
@@ -235,6 +250,7 @@ function indentContinuation(value: string): string {
 }
 
 class PlanAnnotatorView extends ItemView {
+  private selectionPreviewEl: HTMLElement | null = null;
   constructor(leaf: WorkspaceLeaf, private readonly plugin: PlanAnnotatorPlugin) {
     super(leaf);
     this.plugin.views.add(this);
@@ -260,11 +276,23 @@ class PlanAnnotatorView extends ItemView {
   async onClose(): Promise<void> {
     this.plugin.views.delete(this);
   }
+  updateSelectionPreview(text: string | null): void {
+    if (this.selectionPreviewEl) {
+      this.selectionPreviewEl.textContent = text || "No text selected. Select text in a Markdown note first.";
+    }
+  }
+
 
   refresh(): void {
     this.contentEl.empty();
     this.contentEl.createEl("h2", { text: "Comments" });
     const form = this.contentEl.createEl("form", { cls: "plan-annotator-form" });
+    form.createEl("div", { cls: "plan-annotator-selection-label", text: "Selected text" });
+    const selection = this.plugin.getActiveSelection();
+    this.selectionPreviewEl = form.createEl("div", {
+      cls: "plan-annotator-selection-preview",
+      text: selection?.text || "No text selected. Select text in a Markdown note first."
+    });
     const input = form.createEl("textarea", {
       cls: "plan-annotator-comment-input",
       attr: { placeholder: "Input comments here…", "aria-label": "Comment for selected text", rows: "3" }
@@ -291,8 +319,11 @@ class PlanAnnotatorView extends ItemView {
     const annotations = this.plugin.annotationsFor(filePath);
     const heading = this.contentEl.createDiv({ cls: "plan-annotator-heading" });
     heading.createEl("h3", { text: "All comments" });
-    const copyAll = heading.createEl("button", { text: "Copy all", attr: { "aria-label": "Copy all annotated comments", title: "Copy all annotated comments" } });
+    const copyAll = heading.createEl("button", { text: "Copy All", attr: { "aria-label": "Copy all annotated comments", title: "Copy all annotated comments" } });
     copyAll.addEventListener("click", () => void this.plugin.copyAnnotations(annotations));
+    const deleteAll = heading.createEl("button", { text: "Delete All", attr: { "aria-label": "Delete all comments for this note", title: "Delete all comments for this note" } });
+    deleteAll.disabled = annotations.length === 0;
+    deleteAll.addEventListener("click", () => void this.plugin.removeAnnotationsFor(filePath));
     if (file instanceof TFile) this.contentEl.createEl("p", { cls: "plan-annotator-file", text: file.basename });
     if (annotations.length === 0) {
       this.contentEl.createEl("p", { cls: "plan-annotator-empty", text: "No comments for this note yet." });

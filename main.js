@@ -63,7 +63,9 @@ var PlanAnnotatorPlugin = class extends import_obsidian.Plugin {
     this.currentFilePath = (_b = (_a = this.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : null;
     this.registerView(ANNOTATOR_VIEW_TYPE, (leaf) => new PlanAnnotatorView(leaf, this));
     const captureSelection = () => window.requestAnimationFrame(() => {
-      void this.getActiveSelection();
+      var _a2;
+      const selection = this.getActiveSelection();
+      for (const view of this.views) view.updateSelectionPreview((_a2 = selection == null ? void 0 : selection.text) != null ? _a2 : null);
     });
     document.addEventListener("pointerup", captureSelection, true);
     document.addEventListener("keyup", captureSelection, true);
@@ -164,6 +166,18 @@ var PlanAnnotatorPlugin = class extends import_obsidian.Plugin {
       new import_obsidian.Notice("Could not delete annotation.");
     }
   }
+  async removeAnnotationsFor(filePath) {
+    const next = this.annotations.filter((annotation) => annotation.filePath !== filePath);
+    if (next.length === this.annotations.length) return;
+    try {
+      await this.saveData({ annotations: next });
+      this.annotations = next;
+      this.refreshViews();
+      new import_obsidian.Notice("Deleted all comments for this note.");
+    } catch (e) {
+      new import_obsidian.Notice("Could not delete comments.");
+    }
+  }
   async copyAnnotations(annotations) {
     if (annotations.length === 0) {
       new import_obsidian.Notice("No annotations to copy.");
@@ -227,6 +241,7 @@ var PlanAnnotatorView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
+    this.selectionPreviewEl = null;
     this.plugin.views.add(this);
   }
   getViewType() {
@@ -245,10 +260,21 @@ var PlanAnnotatorView = class extends import_obsidian.ItemView {
   async onClose() {
     this.plugin.views.delete(this);
   }
+  updateSelectionPreview(text) {
+    if (this.selectionPreviewEl) {
+      this.selectionPreviewEl.textContent = text || "No text selected. Select text in a Markdown note first.";
+    }
+  }
   refresh() {
     this.contentEl.empty();
     this.contentEl.createEl("h2", { text: "Comments" });
     const form = this.contentEl.createEl("form", { cls: "plan-annotator-form" });
+    form.createEl("div", { cls: "plan-annotator-selection-label", text: "Selected text" });
+    const selection = this.plugin.getActiveSelection();
+    this.selectionPreviewEl = form.createEl("div", {
+      cls: "plan-annotator-selection-preview",
+      text: (selection == null ? void 0 : selection.text) || "No text selected. Select text in a Markdown note first."
+    });
     const input = form.createEl("textarea", {
       cls: "plan-annotator-comment-input",
       attr: { placeholder: "Input comments here\u2026", "aria-label": "Comment for selected text", rows: "3" }
@@ -273,8 +299,11 @@ var PlanAnnotatorView = class extends import_obsidian.ItemView {
     const annotations = this.plugin.annotationsFor(filePath);
     const heading = this.contentEl.createDiv({ cls: "plan-annotator-heading" });
     heading.createEl("h3", { text: "All comments" });
-    const copyAll = heading.createEl("button", { text: "Copy all", attr: { "aria-label": "Copy all annotated comments", title: "Copy all annotated comments" } });
+    const copyAll = heading.createEl("button", { text: "Copy All", attr: { "aria-label": "Copy all annotated comments", title: "Copy all annotated comments" } });
     copyAll.addEventListener("click", () => void this.plugin.copyAnnotations(annotations));
+    const deleteAll = heading.createEl("button", { text: "Delete All", attr: { "aria-label": "Delete all comments for this note", title: "Delete all comments for this note" } });
+    deleteAll.disabled = annotations.length === 0;
+    deleteAll.addEventListener("click", () => void this.plugin.removeAnnotationsFor(filePath));
     if (file instanceof import_obsidian.TFile) this.contentEl.createEl("p", { cls: "plan-annotator-file", text: file.basename });
     if (annotations.length === 0) {
       this.contentEl.createEl("p", { cls: "plan-annotator-empty", text: "No comments for this note yet." });
